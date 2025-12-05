@@ -4,10 +4,10 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const morgan = require('morgan');
-const connectDB = require('../config/db');
-const authRoutes = require('../routes/auth');
-const deviceRoutes = require('../routes/device');
-const adminRoutes = require('../routes/admin');
+const connectDB = require('./config/db');
+const authRoutes = require('./routes/auth');
+const deviceRoutes = require('./routes/device');
+const adminRoutes = require('./routes/admin');
 const setupDeviceSocket = require('./sockets/deviceSocket');
 
 connectDB();
