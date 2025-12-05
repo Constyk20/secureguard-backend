@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
-const User = require('./models/User');
-const generateToken = require('./utils/generateToken');
+const User = require('../models/User');
+const generateToken = require('../utils/generateToken');
 
 exports.register = async (req, res) => {
   const { rollNo, name, email, password, role } = req.body;

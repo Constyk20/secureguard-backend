@@ -1,6 +1,6 @@
 // src/controllers/deviceController.js
-const Device = require('./models/Device');
-const AuditLog = require('./models/AuditLog');
+const Device = require('../models/Device');
+const AuditLog = require('../models/AuditLog');
 
 // 1. Register Device (First app launch)
 exports.registerDevice = async (req, res) => {
