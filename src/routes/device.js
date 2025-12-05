@@ -5,8 +5,8 @@ const {
   registerDevice, 
   reportCompliance, 
   getDeviceStatus 
-} = require('../controllers/deviceController');
-const authMiddleware = require('../middleware/auth');
+} = require('./controllers/deviceController');
+const authMiddleware = require('./middleware/auth');
 const { body, validationResult } = require('express-validator');
 
 const validate = (req, res, next) => {

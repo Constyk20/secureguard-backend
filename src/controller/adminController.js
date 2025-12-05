@@ -1,5 +1,5 @@
-const Device = require('../models/Device');
-const AuditLog = require('../models/AuditLog');
+const Device = require('./models/Device');
+const AuditLog = require('./models/AuditLog');
 const { Server } = require('socket.io');
 
 exports.listDevices = async (req, res) => {

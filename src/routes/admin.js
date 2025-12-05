@@ -5,9 +5,9 @@ const {
   listDevices, 
   lockDevice, 
   wipeDevice 
-} = require('../controllers/adminController');
-const authMiddleware = require('../middleware/auth');
-const adminMiddleware = require('../middleware/admin');
+} = require('./controllers/adminController');
+const authMiddleware = require('./middleware/auth');
+const adminMiddleware = require('./middleware/admin');
 const { body, validationResult } = require('express-validator');
 
 const validate = (req, res, next) => {
