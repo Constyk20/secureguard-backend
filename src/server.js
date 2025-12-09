@@ -62,14 +62,15 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Attach Socket.IO instance to routes
+// Attach Socket.IO instance to routes (This was already correct)
 deviceRoutes.setIO(io);
 adminRoutes.setIO(io);
 
 // API Routes
 app.use('/api/auth', authRoutes);
-app.use('/api/device', deviceRoutes);
-app.use('/api/admin', adminRoutes);
+// FIX APPLIED HERE: Access the 'router' property from the imported object
+app.use('/api/device', deviceRoutes.router); 
+app.use('/api/admin', adminRoutes.router); // Assuming adminRoutes was also updated
 
 // Socket.IO setup
 setupDeviceSocket(io);

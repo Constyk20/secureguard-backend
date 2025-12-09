@@ -1,4 +1,5 @@
 // src/routes/device.js
+
 const express = require('express');
 const router = express.Router();
 const { 
@@ -8,6 +9,15 @@ const {
 } = require('../controllers/deviceController');
 const authMiddleware = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
+
+// Variable to store the Socket.IO instance
+let ioInstance; 
+
+// Function that will be called from server.js to set the Socket.IO instance
+const setIO = (io) => {
+    ioInstance = io;
+    console.log("Socket.IO instance successfully set in device routes.");
+};
 
 const validate = (req, res, next) => {
   const errors = validationResult(req);
@@ -52,4 +62,9 @@ router.post(
 // Get current device status
 router.get('/status', authMiddleware, getDeviceStatus);
 
-module.exports = router;
+// Export both the router and the setIO function
+// This is the fix for "deviceRoutes.setIO is not a function"
+module.exports = {
+    router,
+    setIO, 
+};
