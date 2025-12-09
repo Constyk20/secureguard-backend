@@ -1,7 +1,15 @@
+// src/routes/auth.js
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const User = require('../models/User'); // Import the User model
+const User = require('../models/User'); 
+
+// 1. Define ioInstance and setIO (for consistency with other route files)
+let ioInstance = null;
+
+const setIO = (io) => {
+    ioInstance = io;
+};
 
 // Validation function
 const validateEmail = (email) => {
@@ -14,13 +22,13 @@ router.post('/register', async (req, res) => {
   try {
     console.log('📝 Registration request body:', req.body);
     
-    const { rollNo, name, email, password } = req.body; // Changed username to name
+    const { rollNo, name, email, password } = req.body; 
     
     // Validation
-    if (!rollNo || !name || !email || !password) { // Changed username to name
+    if (!rollNo || !name || !email || !password) { 
       return res.status(400).json({ 
         success: false,
-        message: 'All fields are required: rollNo, name, email, password' // Updated message
+        message: 'All fields are required: rollNo, name, email, password' 
       });
     }
     
@@ -58,25 +66,30 @@ router.post('/register', async (req, res) => {
       }
     }
     
-    // Create new user - using name field instead of username
+    // Create new user
     const user = new User({
       rollNo: rollNo.toUpperCase(),
-      name, // Changed from username to name
+      name, 
       email: email.toLowerCase(),
-      password, // Will be hashed by pre-save middleware
+      password, 
       role: 'student'
     });
     
     await user.save();
     console.log('✅ User registered in MongoDB:', user._id);
     
+    // Optional: Emit event via Socket.IO if needed
+    if (ioInstance) {
+        // ioInstance.emit('new-user-registered', { name: user.name });
+    }
+
     // Generate token
     const token = jwt.sign(
       { 
         id: user._id, 
         role: user.role, 
         rollNo: user.rollNo,
-        name: user.name // Changed from username to name
+        name: user.name 
       },
       process.env.JWT_SECRET || 'secureguard-secret-key-2024-change-this',
       { expiresIn: '7d' }
@@ -92,7 +105,7 @@ router.post('/register', async (req, res) => {
       user: {
         id: user._id,
         rollNo: user.rollNo,
-        name: user.name, // Changed from username to name
+        name: user.name, 
         email: user.email,
         role: user.role
       }
@@ -140,7 +153,7 @@ router.post('/login', async (req, res) => {
       });
     }
     
-    // Find user by roll number or email in MongoDB
+    // Find user by roll number or email
     const user = await User.findOne({
       $or: [
         { rollNo: rollNo.toUpperCase() },
@@ -157,7 +170,7 @@ router.post('/login', async (req, res) => {
       });
     }
     
-    // Check password using the model method
+    // Check password
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
       console.log('❌ Password mismatch for user:', user._id);
@@ -175,7 +188,7 @@ router.post('/login', async (req, res) => {
         id: user._id, 
         role: user.role, 
         rollNo: user.rollNo,
-        name: user.name // Changed from username to name
+        name: user.name 
       },
       process.env.JWT_SECRET || 'secureguard-secret-key-2024-change-this',
       { expiresIn: '7d' }
@@ -191,7 +204,7 @@ router.post('/login', async (req, res) => {
       user: {
         id: user._id,
         rollNo: user.rollNo,
-        name: user.name, // Changed from username to name
+        name: user.name, 
         email: user.email,
         role: user.role
       }
@@ -208,7 +221,7 @@ router.post('/login', async (req, res) => {
 // Get all users (protected route example)
 router.get('/users', async (req, res) => {
   try {
-    const users = await User.find({}, '-password'); // Exclude password field
+    const users = await User.find({}, '-password'); 
     res.json({
       success: true,
       count: users.length,
@@ -243,4 +256,8 @@ router.get('/test-db', async (req, res) => {
   }
 });
 
-module.exports = router;
+// 2. Export object containing router and setIO
+module.exports = {
+    router,
+    setIO
+};
