@@ -24,7 +24,9 @@ const io = new Server(server, {
     credentials: true,
     methods: ["GET", "POST"]
   },
-  transports: ['websocket', 'polling']
+  transports: ['websocket', 'polling'],
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 // Basic security headers
@@ -55,21 +57,51 @@ app.get('/health', (req, res) => {
   res.status(200).json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
+    socketConnections: io.engine.clientsCount
   });
 });
+
+// Attach Socket.IO instance to routes
+deviceRoutes.setIO(io);
+adminRoutes.setIO(io);
 
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/device', deviceRoutes);
-app.use('/api/admin', adminRoutes(io));
+app.use('/api/admin', adminRoutes);
 
 // Socket.IO setup
 setupDeviceSocket(io);
 
+// Socket.IO connection monitoring
+io.on('connection', (socket) => {
+  console.log(`🔌 Socket connected: ${socket.id}`);
+  
+  socket.on('disconnect', (reason) => {
+    console.log(`🔌 Socket disconnected: ${socket.id} - Reason: ${reason}`);
+  });
+  
+  socket.on('error', (error) => {
+    console.error(`❌ Socket error: ${socket.id}`, error);
+  });
+});
+
+// Log Socket.IO events for debugging
+if (process.env.NODE_ENV === 'development') {
+  io.on('connection', (socket) => {
+    const events = ['register-device', 'heartbeat', 'compliance-update', 'disconnect'];
+    events.forEach(event => {
+      socket.on(event, (data) => {
+        console.log(`📡 [${socket.id}] ${event}:`, data);
+      });
+    });
+  });
+}
+
 // Error Handling Middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('❌ Error:', err);
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal Server Error',
@@ -92,7 +124,25 @@ const HOST = process.env.HOST || '0.0.0.0';
 server.listen(PORT, HOST, () => {
   console.log(`=== SecureGuard Backend ===`);
   console.log(`🚀 Server Running on PORT ${PORT}`);
+  console.log(`🔌 Socket.IO Enabled`);
   console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`📅 Started at: ${new Date().toISOString()}`);
   console.log(`===========================`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 SIGTERM signal received: closing HTTP server');
+  server.close(() => {
+    console.log('✅ HTTP server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT signal received: closing HTTP server');
+  server.close(() => {
+    console.log('✅ HTTP server closed');
+    process.exit(0);
+  });
 });

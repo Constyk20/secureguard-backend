@@ -1,13 +1,9 @@
-// src/routes/auth.js
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
+const User = require('../models/User'); // Import the User model
 
-// In-memory user storage (replace with database later)
-const users = [];
-
-// Simple validation function
+// Validation function
 const validateEmail = (email) => {
   const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return re.test(email);
@@ -18,13 +14,13 @@ router.post('/register', async (req, res) => {
   try {
     console.log('📝 Registration request body:', req.body);
     
-    const { rollNo, username, email, password } = req.body;
+    const { rollNo, name, email, password } = req.body; // Changed username to name
     
     // Validation
-    if (!rollNo || !username || !email || !password) {
+    if (!rollNo || !name || !email || !password) { // Changed username to name
       return res.status(400).json({ 
         success: false,
-        message: 'All fields are required: rollNo, username, email, password' 
+        message: 'All fields are required: rollNo, name, email, password' // Updated message
       });
     }
     
@@ -42,63 +38,86 @@ router.post('/register', async (req, res) => {
       });
     }
     
-    // Check if user exists
-    if (users.find(u => u.email === email)) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'User already exists with this email' 
-      });
+    // Check if user exists in MongoDB
+    const existingUser = await User.findOne({
+      $or: [{ email }, { rollNo: rollNo.toUpperCase() }]
+    });
+    
+    if (existingUser) {
+      if (existingUser.email === email) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'User already exists with this email' 
+        });
+      }
+      if (existingUser.rollNo === rollNo.toUpperCase()) {
+        return res.status(400).json({ 
+          success: false,
+          message: 'Roll number already registered' 
+        });
+      }
     }
     
-    // Check if roll number exists
-    if (users.find(u => u.rollNo === rollNo)) {
-      return res.status(400).json({ 
-        success: false,
-        message: 'Roll number already registered' 
-      });
-    }
+    // Create new user - using name field instead of username
+    const user = new User({
+      rollNo: rollNo.toUpperCase(),
+      name, // Changed from username to name
+      email: email.toLowerCase(),
+      password, // Will be hashed by pre-save middleware
+      role: 'student'
+    });
     
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-    
-    const user = {
-      id: Date.now().toString(),
-      rollNo,
-      username,
-      email,
-      password: hashedPassword,
-      role: 'student',
-      createdAt: new Date().toISOString()
-    };
-    
-    users.push(user);
-    console.log('✅ User registered:', user.id);
+    await user.save();
+    console.log('✅ User registered in MongoDB:', user._id);
     
     // Generate token
     const token = jwt.sign(
       { 
-        id: user.id, 
+        id: user._id, 
         role: user.role, 
         rollNo: user.rollNo,
-        username: user.username 
+        name: user.name // Changed from username to name
       },
       process.env.JWT_SECRET || 'secureguard-secret-key-2024-change-this',
       { expiresIn: '7d' }
     );
     
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+    
     res.status(201).json({
       success: true,
       token,
       user: {
-        id: user.id,
+        id: user._id,
         rollNo: user.rollNo,
-        username: user.username,
+        name: user.name, // Changed from username to name
         email: user.email,
         role: user.role
       }
     });
   } catch (error) {
     console.error('❌ Registration error:', error);
+    
+    // Handle MongoDB validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({ 
+        success: false,
+        message: messages.join(', ') 
+      });
+    }
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ 
+        success: false,
+        message: `${field} already exists` 
+      });
+    }
+    
     res.status(500).json({ 
       success: false,
       message: 'Server error' 
@@ -121,8 +140,14 @@ router.post('/login', async (req, res) => {
       });
     }
     
-    // Find user by roll number or email
-    const user = users.find(u => u.rollNo === rollNo || u.email === rollNo);
+    // Find user by roll number or email in MongoDB
+    const user = await User.findOne({
+      $or: [
+        { rollNo: rollNo.toUpperCase() },
+        { email: rollNo.toLowerCase() }
+      ],
+      isActive: true
+    });
     
     if (!user) {
       console.log('❌ User not found for rollNo/email:', rollNo);
@@ -132,37 +157,41 @@ router.post('/login', async (req, res) => {
       });
     }
     
-    // Check password
-    const isMatch = await bcrypt.compare(password, user.password);
+    // Check password using the model method
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      console.log('❌ Password mismatch for user:', user.id);
+      console.log('❌ Password mismatch for user:', user._id);
       return res.status(401).json({
         success: false,
         message: 'Invalid credentials'
       });
     }
     
-    console.log('✅ Login successful for user:', user.id);
+    console.log('✅ Login successful for user:', user._id);
     
     // Generate token
     const token = jwt.sign(
       { 
-        id: user.id, 
+        id: user._id, 
         role: user.role, 
         rollNo: user.rollNo,
-        username: user.username 
+        name: user.name // Changed from username to name
       },
       process.env.JWT_SECRET || 'secureguard-secret-key-2024-change-this',
       { expiresIn: '7d' }
     );
     
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+    
     res.status(200).json({
       success: true,
       token,
       user: {
-        id: user.id,
+        id: user._id,
         rollNo: user.rollNo,
-        username: user.username,
+        name: user.name, // Changed from username to name
         email: user.email,
         role: user.role
       }
@@ -176,19 +205,42 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Test endpoint to see all users
-router.get('/users', (req, res) => {
-  res.json({
-    success: true,
-    count: users.length,
-    users: users.map(u => ({
-      id: u.id,
-      rollNo: u.rollNo,
-      username: u.username,
-      email: u.email,
-      role: u.role
-    }))
-  });
+// Get all users (protected route example)
+router.get('/users', async (req, res) => {
+  try {
+    const users = await User.find({}, '-password'); // Exclude password field
+    res.json({
+      success: true,
+      count: users.length,
+      users
+    });
+  } catch (error) {
+    console.error('❌ Get users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Test endpoint to check database connection
+router.get('/test-db', async (req, res) => {
+  try {
+    const userCount = await User.countDocuments();
+    res.json({
+      success: true,
+      message: 'Database connected successfully',
+      userCount,
+      mongoDB: 'Connected'
+    });
+  } catch (error) {
+    res.json({
+      success: false,
+      message: 'Database connection failed',
+      error: error.message,
+      mongoDB: 'Disconnected'
+    });
+  }
 });
 
 module.exports = router;
