@@ -1,15 +1,9 @@
-// src/routes/auth.js
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User'); 
 
-// 1. Define ioInstance and setIO (for consistency with other route files)
-let ioInstance = null;
-
-const setIO = (io) => {
-    ioInstance = io;
-};
+// No need for ioInstance in auth routes since they don't use Socket.IO
 
 // Validation function
 const validateEmail = (email) => {
@@ -78,11 +72,6 @@ router.post('/register', async (req, res) => {
     await user.save();
     console.log('✅ User registered in MongoDB:', user._id);
     
-    // Optional: Emit event via Socket.IO if needed
-    if (ioInstance) {
-        // ioInstance.emit('new-user-registered', { name: user.name });
-    }
-
     // Generate token
     const token = jwt.sign(
       { 
@@ -218,8 +207,67 @@ router.post('/login', async (req, res) => {
   }
 });
 
-// Get all users (protected route example)
-router.get('/users', async (req, res) => {
+// Get current user (protected route)
+const { auth } = require('../middleware/auth');
+router.get('/me', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    res.json({
+      success: true,
+      user
+    });
+  } catch (error) {
+    console.error('❌ Get current user error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Change password (protected route)
+router.post('/change-password', auth, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required'
+      });
+    }
+    
+    const user = await User.findById(req.user.id);
+    
+    // Check current password
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+    
+    // Update password
+    user.password = newPassword;
+    await user.save();
+    
+    res.json({
+      success: true,
+      message: 'Password updated successfully'
+    });
+  } catch (error) {
+    console.error('❌ Change password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// Get all users (protected route - admin only)
+const { isAdmin } = require('../middleware/auth');
+router.get('/users', auth, isAdmin, async (req, res) => {
   try {
     const users = await User.find({}, '-password'); 
     res.json({
@@ -256,8 +304,5 @@ router.get('/test-db', async (req, res) => {
   }
 });
 
-// 2. Export object containing router and setIO
-module.exports = {
-    router,
-    setIO
-};
+// Export the router directly
+module.exports = router;

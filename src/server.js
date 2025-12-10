@@ -5,8 +5,6 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
-const authRoutes = require('./routes/auth');
-const setupDeviceSocket = require('./sockets/deviceSocket');
 
 connectDB();
 
@@ -75,10 +73,12 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API Routes - FIXED: Import and use routes properly
-const deviceRoutes = require('./routes/device')(io);
-const adminRoutes = require('./routes/admin')(io);
+// Import route files
+const authRoutes = require('./routes/auth');
+const deviceRoutes = require('./routes/device')(io);  // Pass io to device routes
+const adminRoutes = require('./routes/admin')(io);    // Pass io to admin routes
 
+// API Routes - Now these are proper router objects
 app.use('/api/auth', authRoutes);
 app.use('/api/device', deviceRoutes);
 app.use('/api/admin', adminRoutes);
@@ -90,24 +90,24 @@ if (process.env.NODE_ENV === 'development') {
     if (r.route && r.route.path) {
       console.log(`  ${Object.keys(r.route.methods).join(', ').toUpperCase()} ${r.route.path}`);
     } else if (r.name === 'router') {
-      r.handle.stack.forEach((handler) => {
-        if (handler.route) {
-          const route = handler.route;
-          const method = Object.keys(route.methods).join(', ').toUpperCase();
-          console.log(`  ${method} ${r.regexp.source.replace('\\/?', '').replace('(?=\\/|$)', '')}${route.path}`);
-        }
-      });
+      console.log(`  Router mounted at: ${r.regexp}`);
     }
   });
   console.log('\n');
 }
 
-// Socket.IO setup
-setupDeviceSocket(io);
+// Socket.IO setup (if you have a separate socket setup file)
+// setupDeviceSocket(io);
 
 // Socket.IO connection monitoring
 io.on('connection', (socket) => {
   console.log(`🔌 Socket connected: ${socket.id}`);
+  
+  // Join room based on device ID if provided
+  socket.on('join_device', (deviceId) => {
+    socket.join(deviceId);
+    console.log(`📱 Socket ${socket.id} joined device room: ${deviceId}`);
+  });
   
   socket.on('disconnect', (reason) => {
     console.log(`🔌 Socket disconnected: ${socket.id} - Reason: ${reason}`);
