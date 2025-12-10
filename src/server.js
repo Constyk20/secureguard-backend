@@ -19,7 +19,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? process.env.CLIENT_URL || "*"
+      ? [process.env.CLIENT_URL, 'https://secureguard-admin.onrender.com']
       : "*",
     credentials: true,
     methods: ["GET", "POST"]
@@ -40,7 +40,7 @@ app.use((req, res, next) => {
 // CORS Configuration
 const corsOptions = {
   origin: process.env.NODE_ENV === 'production' 
-    ? process.env.CLIENT_URL || "*"
+    ? [process.env.CLIENT_URL, 'https://secureguard-admin.onrender.com']
     : "*",
   credentials: true,
   optionsSuccessStatus: 200
@@ -51,6 +51,21 @@ app.use(cors(corsOptions));
 app.use(morgan(process.env.NODE_ENV === 'development' ? 'dev' : 'combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Root route
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'SecureGuard Backend API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/health',
+      auth: '/api/auth',
+      devices: '/api/device',
+      admin: '/api/admin'
+    }
+  });
+});
 
 // Health Check Route
 app.get('/health', (req, res) => {
@@ -63,16 +78,32 @@ app.get('/health', (req, res) => {
 });
 
 // Attach Socket.IO instance to routes
-// Note: We check if setIO exists before calling it to be safe
-if (deviceRoutes.setIO) deviceRoutes.setIO(io);
-if (adminRoutes.setIO) adminRoutes.setIO(io);
-if (authRoutes.setIO) authRoutes.setIO(io); // Added for consistency with auth.js update
+deviceRoutes.setIO(io);
+adminRoutes.setIO(io);
 
-// API Routes
-// FIX APPLIED HERE: Added .router to authRoutes because we updated auth.js export structure
-app.use('/api/auth', authRoutes.router); 
-app.use('/api/device', deviceRoutes.router); 
-app.use('/api/admin', adminRoutes.router); 
+// API Routes - Make sure these are registered correctly
+app.use('/api/auth', authRoutes);
+app.use('/api/device', deviceRoutes);
+app.use('/api/admin', adminRoutes);
+
+// Log all registered routes (helpful for debugging)
+if (process.env.NODE_ENV === 'development') {
+  console.log('\n📋 Registered Routes:');
+  app._router.stack.forEach((r) => {
+    if (r.route && r.route.path) {
+      console.log(`  ${Object.keys(r.route.methods).join(', ').toUpperCase()} ${r.route.path}`);
+    } else if (r.name === 'router') {
+      r.handle.stack.forEach((handler) => {
+        if (handler.route) {
+          const route = handler.route;
+          const method = Object.keys(route.methods).join(', ').toUpperCase();
+          console.log(`  ${method} ${r.regexp.source.replace('\\/?', '').replace('(?=\\/|$)', '')}${route.path}`);
+        }
+      });
+    }
+  });
+  console.log('\n');
+}
 
 // Socket.IO setup
 setupDeviceSocket(io);
@@ -90,18 +121,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// Log Socket.IO events for debugging
-if (process.env.NODE_ENV === 'development') {
-  io.on('connection', (socket) => {
-    const events = ['register-device', 'heartbeat', 'compliance-update', 'disconnect'];
-    events.forEach(event => {
-      socket.on(event, (data) => {
-        console.log(`📡 [${socket.id}] ${event}:`, data);
-      });
-    });
-  });
-}
-
 // Error Handling Middleware
 app.use((err, req, res, next) => {
   console.error('❌ Error:', err);
@@ -112,12 +131,20 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 Handler
+// 404 Handler - Must be AFTER all routes
 app.use('*', (req, res) => {
+  console.log(`⚠️  404 - Route not found: ${req.method} ${req.originalUrl}`);
   res.status(404).json({
     success: false,
     message: 'Route not found',
-    path: req.originalUrl
+    path: req.originalUrl,
+    availableEndpoints: {
+      root: 'GET /',
+      health: 'GET /health',
+      auth: '/api/auth/*',
+      devices: '/api/device/*',
+      admin: '/api/admin/*'
+    }
   });
 });
 
