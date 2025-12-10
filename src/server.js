@@ -6,8 +6,6 @@ const cors = require('cors');
 const morgan = require('morgan');
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/auth');
-const deviceRoutes = require('./routes/device');
-const adminRoutes = require('./routes/admin');
 const setupDeviceSocket = require('./sockets/deviceSocket');
 
 connectDB();
@@ -77,11 +75,10 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Attach Socket.IO instance to routes
-deviceRoutes.setIO(io);
-adminRoutes.setIO(io);
+// API Routes - FIXED: Import and use routes properly
+const deviceRoutes = require('./routes/device')(io);
+const adminRoutes = require('./routes/admin')(io);
 
-// API Routes - Make sure these are registered correctly
 app.use('/api/auth', authRoutes);
 app.use('/api/device', deviceRoutes);
 app.use('/api/admin', adminRoutes);
